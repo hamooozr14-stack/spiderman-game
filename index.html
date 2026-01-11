@@ -70,11 +70,9 @@
 <canvas id="game" width="1000" height="500"></canvas>
 
 <script>
-// Canvas
+// --- Canvas and UI ---
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-
-// UI Elements
 let overlay = document.getElementById("overlay");
 let difficultyOverlay = document.getElementById("difficultyOverlay");
 let levelNumberEl = document.getElementById("levelNumber");
@@ -86,10 +84,10 @@ let finalScoreEl = document.getElementById("finalScore");
 let finalHighEl = document.getElementById("finalHighScore");
 let finalTimeEl = document.getElementById("finalTime");
 
-// Input
+// --- Input ---
 let keys = {};
-window.addEventListener("keydown", e => keys[e.code]=true);
-window.addEventListener("keyup", e => keys[e.code]=false);
+window.addEventListener("keydown", e=>keys[e.code]=true);
+window.addEventListener("keyup", e=>keys[e.code]=false);
 
 // Mobile buttons
 document.getElementById("leftBtn").addEventListener("touchstart", ()=>keys["ArrowLeft"]=true);
@@ -101,8 +99,8 @@ document.getElementById("jumpBtn").addEventListener("touchend", ()=>keys["ArrowU
 document.getElementById("shootBtn").addEventListener("touchstart", ()=>keys["Space"]=true);
 document.getElementById("shootBtn").addEventListener("touchend", ()=>keys["Space"]=false);
 
-// Game variables
-let spiderman, cameraX, gravity, projectiles, enemies, powerUps, obstacles, buildings;
+// --- Game Variables ---
+let spiderman, cameraX, gravity, projectiles, enemies, enemyBullets, powerUps, obstacles, buildings;
 let gameStarted=false, gameOver=false, currentLevel=1, currentDifficulty='easy', startTime=0;
 let highScores = {};
 
@@ -121,7 +119,7 @@ for(let l=1;l<=5;l++){
   });
 }
 
-// LEVEL FUNCTIONS
+// --- LEVEL FUNCTIONS ---
 function selectLevel(level){
   currentLevel = level;
   overlay.style.display="none";
@@ -145,12 +143,12 @@ function startGame(diff){
 function restartGame(){ initGame(currentLevel,currentDifficulty); spiderman.health=100; spiderman.score=0; gameOver=false; gameStarted=true; startTime=Date.now(); }
 function nextLevel(){ levelEndOverlay.style.display="none"; if(currentLevel<5){ selectLevel(currentLevel+1); } else { alert("You finished all levels!"); backToMenu(); } }
 
-// INIT GAME
+// --- INIT GAME ---
 function initGame(level,diff){
   spiderman={x:100,y:350,w:40,h:60,dx:0,dy:0,onGround:false,swinging:false,web:null,score:0,health:100};
-  cameraX=0; gravity=0.6; projectiles=[]; enemies=[]; powerUps=[]; obstacles=[]; buildings=[];
+  cameraX=0; gravity=0.7; projectiles=[]; enemies=[]; enemyBullets=[]; powerUps=[]; obstacles=[]; buildings=[];
   
-  let enemyCount=[5,8,10,12,15][level-1];
+  let enemyCount=[6,10,12,15,18][level-1];
   let obstacleCount=[0,1,2,3,4][level-1];
   let powerUpCount=[0,1,2,2,3][level-1];
   let mapLength=[1500,1800,2000,2500,3000][level-1];
@@ -165,29 +163,30 @@ function initGame(level,diff){
     buildings.push({x,y,w,h,color});
   }
   // Obstacles
-  for(let i=0;i<obstacleCount;i++){ let x=200+i*300,y=250+Math.random()*150; obstacles.push({x,y,w:50,h:10,dx:Math.random()<0.5?1:-1}); }
+  for(let i=0;i<obstacleCount;i++){ let x=200+i*300,y=250+Math.random()*150; obstacles.push({x,y,w:50,h:10,dx:Math.random()<0.5?1.5:-1.5}); }
   // Power-ups
   for(let i=0;i<powerUpCount;i++){ let x=150+i*400,y=200+Math.random()*150; let type=Math.random()<0.5?"health":"speed"; powerUps.push({x,y,type,collected:false}); }
   // Enemies
   for(let i=0;i<enemyCount;i++) spawnEnemy();
 }
 
-// SPAWN ENEMY
+// --- SPAWN ENEMY ---
 function spawnEnemy(){
-  let x=500+Math.random()*1000, y=350, dx=Math.random()<0.5?1.5:-1.5;
+  let x=500+Math.random()*1000, y=350, dx=(Math.random()*2+1)*(Math.random()<0.5?-1:1);
   let colors=['green','blue','red']; let color=colors[Math.floor(Math.random()*colors.length)];
   let hits = color==='green'?1:color==='blue'?2:3;
-  enemies.push({x,y,w:30,h:40,dx,color,hits,maxHits:hits});
+  let hasGun = Math.random()<0.3; // 30% chance enemy has a gun
+  enemies.push({x,y,w:30,h:40,dx,color,hits,maxHits:hits,gun:hasGun,shootTimer:Math.random()*100});
 }
 
-// SHOOT WEB
+// --- SHOOT WEB ---
 function shootProjectile(){ 
   let dir = keys["ArrowRight"]?1:keys["ArrowLeft"]?-1:1;
   projectiles.push({x:spiderman.x + (dir>0?40:0), y:spiderman.y +30, dx:8*dir});
   swingSound.play();
 }
 
-// UPDATE GAME
+// --- UPDATE GAME ---
 function update(){
   if(!gameStarted || gameOver) return;
   cameraX = spiderman.x - 200;
@@ -197,28 +196,50 @@ function update(){
   if(keys["ArrowUp"] && spiderman.onGround){ spiderman.dy=-12; spiderman.onGround=false; jumpSound.play(); }
   if(keys["Space"]){ shootProjectile(); keys["Space"]=false; }
 
-  spiderman.dy+=gravity; spiderman.x+=spiderman.dx;
-  spiderman.onGround=false;
+  // --- Swinging ---
+  if(spiderman.swinging && spiderman.web){
+    let dx = spiderman.web.x - (spiderman.x + spiderman.w/2);
+    let dy = spiderman.web.y - (spiderman.y + spiderman.h/2);
+    let length = Math.sqrt(dx*dx + dy*dy);
+    let angle = Math.atan2(dy, dx);
+    let force = 0.1;
+    spiderman.x += Math.cos(angle)*force;
+    spiderman.y += Math.sin(angle)*force;
+  } else {
+    spiderman.dy += gravity;
+    spiderman.x += spiderman.dx;
+    spiderman.y += spiderman.dy;
+  }
 
-  // Ground
+  spiderman.onGround=false;
   if(spiderman.y+spiderman.h>canvas.height-20){ spiderman.y=canvas.height-20-spiderman.h; spiderman.dy=0; spiderman.onGround=true; }
 
   // Projectiles
   projectiles.forEach(p=>p.x+=p.dx);
   projectiles=projectiles.filter(p=>p.x>cameraX && p.x<cameraX+canvas.width);
 
+  // Enemy bullets
+  enemyBullets.forEach(b=>{ b.x+=b.dx; b.y+=b.dy; if(b.x>cameraX && b.x<cameraX+canvas.width && b.y<canvas.height){ if(spiderman.x< b.x && spiderman.x+spiderman.w> b.x && spiderman.y< b.y && spiderman.y+spiderman.h> b.y){ spiderman.health-=5; } } });
+  enemyBullets = enemyBullets.filter(b=>b.y<canvas.height);
+
   // Enemies
   enemies.forEach((e,ei)=>{
-    e.x+=e.dx; if(e.x<0||e.x>3000) e.dx*=-1;
+    e.x+=e.dx;
+    // Bounce off buildings
+    buildings.forEach(b=>{
+      if(e.x< b.x+b.w && e.x+e.w> b.x && e.y+e.h> b.y){ e.dx*=-1; }
+    });
+    // Shoot bullets if gun
+    if(e.gun){ e.shootTimer--; if(e.shootTimer<=0){ let angle = Math.atan2(spiderman.y-e.y,spiderman.x-e.x); enemyBullets.push({x:e.x+15,y:e.y+20,dx:Math.cos(angle)*5,dy:Math.sin(angle)*5}); e.shootTimer=100+Math.random()*50; } }
+    // Hit by player web
     projectiles.forEach((p,pi)=>{
       if(p.x<e.x+e.w && p.x+10>e.x && p.y<e.y+e.h && p.y>e.y){
         e.hits--; projectiles.splice(pi,1);
         if(e.hits<=0){ enemies.splice(ei,1); spiderman.score+=10; hitSound.play(); }
       }
     });
-    if(spiderman.x<e.x+e.w && spiderman.x+spiderman.w>e.x && spiderman.y<e.y+e.h && spiderman.y+spiderman.h>e.y){
-      spiderman.health-=0.5;
-    }
+    // Collision with player
+    if(spiderman.x<e.x+e.w && spiderman.x+spiderman.w>e.x && spiderman.y<e.y+e.h && spiderman.y+spiderman.h>e.y){ spiderman.health-=0.5; }
   });
 
   // Power-ups
@@ -236,7 +257,7 @@ function update(){
   draw();
 }
 
-// GAME OVER
+// --- GAME OVER ---
 function showGameOver(){
   finalScoreEl.textContent = "Score: "+Math.floor(spiderman.score);
   finalHighEl.textContent = "High Score (L"+currentLevel+"-"+currentDifficulty+"): "+highScores[hsKey(currentLevel,currentDifficulty)];
@@ -245,7 +266,7 @@ function showGameOver(){
   gameOverOverlay.style.display="flex";
 }
 
-// DRAW
+// --- DRAW ---
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.fillStyle="#87CEEB"; ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -257,22 +278,21 @@ function draw(){
   obstacles.forEach(o=>{ ctx.fillStyle="brown"; ctx.fillRect(o.x-cameraX,o.y,o.w,o.h); });
   powerUps.forEach(p=>{ if(!p.collected){ ctx.fillStyle=p.type==="health"?"pink":"cyan"; ctx.fillRect(p.x-cameraX,p.y,20,20); } });
 
+  if(spiderman.swinging && spiderman.web){ ctx.strokeStyle="white"; ctx.lineWidth=2; ctx.beginPath();
+    ctx.moveTo(spiderman.x+spiderman.w/2-cameraX, spiderman.y+spiderman.h/2); ctx.lineTo(spiderman.web.x-cameraX, spiderman.web.y); ctx.stroke();
+  }
+
   ctx.fillStyle="red"; ctx.fillRect(spiderman.x-cameraX,spiderman.y+20,spiderman.w,40);
   ctx.beginPath(); ctx.arc(spiderman.x+20-cameraX,spiderman.y+10,10,0,Math.PI*2); ctx.fill();
 
   ctx.fillStyle="white"; projectiles.forEach(p=>ctx.fillRect(p.x-cameraX,p.y,10,2));
+  enemyBullets.forEach(b=>{ ctx.fillStyle="black"; ctx.fillRect(b.x-cameraX,b.y,5,5); });
 
-  enemies.forEach(e=>{ ctx.fillStyle=e.color; ctx.fillRect(e.x-cameraX,e.y,e.w,e.h); });
+  enemies.forEach(e=>{ ctx.fillStyle=e.color; ctx.fillRect(e.x-cameraX,e.y,e.w,e.h);
+    if(e.gun){ ctx.fillStyle="black"; ctx.fillRect(e.x+10-cameraX,e.y-5,10,5); }
+  });
 
   ctx.fillStyle="white"; ctx.font="16px Arial";
   ctx.fillText("Health: "+Math.floor(spiderman.health),10,20);
   ctx.fillText("Score: "+Math.floor(spiderman.score),10,40);
-  ctx.fillText("High Score (L"+currentLevel+"-"+currentDifficulty+"): "+highScores[hsKey(currentLevel,currentDifficulty)],10,60);
-}
-
-// LOOP
-function loop(){ update(); requestAnimationFrame(loop); }
-
-</script>
-</body>
-</html>
+  ctx.fillText("High Score (L"+currentLevel
