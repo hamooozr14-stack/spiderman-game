@@ -1,94 +1,58 @@
 <!DOCTYPE html>
 <html>
-
 <head>
-  <title>Spider-Man 2 Mini Game</title>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      font-family: Arial;
-      background: #87CEEB;
-    }
-
-    canvas {
-      display: block;
-      margin: auto;
-      background: #87CEEB;
-    }
-
-    #overlay,
-    #gameOverOverlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.9);
-      color: white;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      font-family: Arial;
-      z-index: 10;
-    }
-
-    button {
-      padding: 10px 20px;
-      margin: 10px;
-      font-size: 16px;
-      cursor: pointer;
-    }
-
-    #backBtn,
-    #restartBtn {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      z-index: 5;
-      padding: 8px 16px;
-      font-size: 14px;
-      cursor: pointer;
-      display: none;
-    }
-
-    #restartBtn {
-      right: 120px;
-    }
-  </style>
+<title>Spider-Man 2 Mini Game</title>
+<style>
+body { margin:0; overflow:hidden; font-family:Arial; background:#87CEEB; }
+canvas { display:block; margin:auto; background:#87CEEB; }
+#overlay, #gameOverOverlay {
+  position:absolute; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.9); color:white; display:flex;
+  flex-direction:column; justify-content:center; align-items:center;
+  font-family:Arial; z-index:10;
+}
+button {
+  padding:10px 20px; margin:10px; font-size:16px; cursor:pointer;
+}
+#backBtn, #restartBtn { 
+  position:absolute; top:10px; right:10px; z-index:5; padding:8px 16px; font-size:14px; cursor:pointer; display:none;
+}
+#restartBtn { right:120px; }
+</style>
 </head>
-
 <body>
 
-  <div id="overlay">
-    <h1>Spider-Man 2 Mini</h1>
-    <p>Select Difficulty:</p>
-    <div>
-      <button onclick="startGame('easy')">Easy</button>
-      <button onclick="startGame('medium')">Medium</button>
-      <button onclick="startGame('hard')">Hard</button>
-      <button onclick="startGame('impossible')">Impossible</button>
-    </div>
-    <p>Arrow keys to move/jump, click to swing, space to shoot webs!</p>
+<!-- Background music -->
+<audio id="bgMusic" src="music.mp3" loop autoplay></audio>
+
+<div id="overlay">
+  <h1>Spider-Man 2 Mini</h1>
+  <p>Select Difficulty:</p>
+  <div>
+    <button onclick="startGame('easy')">Easy</button>
+    <button onclick="startGame('medium')">Medium</button>
+    <button onclick="startGame('hard')">Hard</button>
+    <button onclick="startGame('impossible')">Impossible</button>
   </div>
+  <p>Arrow keys to move/jump, click to swing, space to shoot webs!</p>
+</div>
 
-  <div id="gameOverOverlay" style="display:none;">
-    <h1>GAME OVER</h1>
-    <p id="finalScore"></p>
-    <p id="finalHighScore"></p>
-    <p id="finalTime"></p>
-    <button onclick="restartGame()">Restart</button>
-    <button onclick="backToMenu()">Back</button>
-  </div>
+<div id="gameOverOverlay" style="display:none;">
+  <h1>GAME OVER</h1>
+  <p id="finalScore"></p>
+  <p id="finalHighScore"></p>
+  <p id="finalTime"></p>
+  <button onclick="restartGame()">Restart</button>
+  <button onclick="backToMenu()">Back</button>
+</div>
 
-  <button id="backBtn" onclick="backToMenu()">Back</button>
-  <button id="restartBtn" onclick="restartGame()">Restart</button>
+<button id="backBtn" onclick="backToMenu()">Back</button>
+<button id="restartBtn" onclick="restartGame()">Restart</button>
 
-  <canvas id="game" width="800" height="400"></canvas>
+<canvas id="game" width="800" height="400"></canvas>
 
-  <script>
-    // Canvas
+<script>
+// Canvas
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 let overlay = document.getElementById("overlay");
@@ -135,6 +99,8 @@ function startGame(difficulty){
   gameStarted = true;
   gameOver = false;
   startTime = Date.now();
+  // play music
+  document.getElementById("bgMusic").play();
   loop();
 }
 
@@ -204,7 +170,13 @@ function spawnEnemy(){
 
 // Shoot Web
 function shootProjectile() {
-  projectiles.push({x: spiderman.x+20, y: spiderman.y+30, dx:8});
+  // Determine direction: 1 = right, -1 = left
+  let dir = spiderman.dx >= 0 ? 1 : -1;
+  projectiles.push({ 
+    x: spiderman.x + (dir === 1 ? 40 : 0), 
+    y: spiderman.y + 30, 
+    dx: 8 * dir 
+  });
 }
 
 // Update
@@ -286,7 +258,7 @@ function update(){
 
   // Projectiles
   projectiles.forEach(p => p.x += p.dx);
-  projectiles = projectiles.filter(p => p.x < cameraX + canvas.width);
+  projectiles = projectiles.filter(p => p.x < cameraX + canvas.width && p.x > cameraX);
 
   // Enemy movement & collision
   enemies.forEach((e,ei)=>{
@@ -387,7 +359,7 @@ function draw(){
 
 // Loop
 function loop(){ update(); requestAnimationFrame(loop); }
-  </script>
+</script>
 </body>
-
 </html>
+
