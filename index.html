@@ -22,9 +22,6 @@ button {
 </head>
 <body>
 
-<!-- Background music -->
-<audio id="bgMusic" src="music.mp3" loop autoplay></audio>
-
 <div id="overlay">
   <h1>Spider-Man 2 Mini</h1>
   <p>Select Difficulty:</p>
@@ -52,7 +49,7 @@ button {
 <canvas id="game" width="800" height="400"></canvas>
 
 <script>
-// Canvas
+// Canvas and UI
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 let overlay = document.getElementById("overlay");
@@ -73,7 +70,7 @@ canvas.addEventListener("mouseup", e => { mouse.down=false; });
 canvas.addEventListener("mousemove", e => { mouse.x=e.offsetX; mouse.y=e.offsetY; });
 
 // Game Variables
-let spiderman, cameraX, gravity, projectiles, enemies;
+let spiderman, cameraX, gravity, projectiles, enemies, powerUps, obstacles;
 let farBuildings, closeBuildings;
 let gameStarted = false;
 let enemySpawnRate = 2000;
@@ -81,6 +78,12 @@ let currentDifficulty = 'easy';
 let highScores = {easy:0, medium:0, hard:0, impossible:0};
 let gameOver = false;
 let startTime = 0;
+
+// Sound Effects
+let jumpSound = new Audio("https://www.soundjay.com/button/beep-07.mp3");
+let swingSound = new Audio("https://www.soundjay.com/button/button-16.mp3");
+let hitSound = new Audio("https://www.soundjay.com/button/button-3.mp3");
+let gameOverSound = new Audio("https://www.soundjay.com/button/beep-10.mp3");
 
 // Load high scores
 for(let diff in highScores){
@@ -99,8 +102,6 @@ function startGame(difficulty){
   gameStarted = true;
   gameOver = false;
   startTime = Date.now();
-  // play music
-  document.getElementById("bgMusic").play();
   loop();
 }
 
@@ -132,6 +133,8 @@ function initGame(difficulty){
   gravity = 0.6;
   projectiles = [];
   enemies = [];
+  powerUps = [];
+  obstacles = [];
   farBuildings = [];
   closeBuildings = [];
 
@@ -160,34 +163,51 @@ function initGame(difficulty){
   // Spawn enemies
   if(window.enemyInterval) clearInterval(window.enemyInterval);
   window.enemyInterval = setInterval(spawnEnemy, enemySpawnRate);
+
+  // Spawn obstacles
+  for(let i=0;i<10;i++){
+    let x = 100 + i*200;
+    let y = 250 + Math.random()*100;
+    obstacles.push({x, y, w:50, h:10, dx:Math.random()<0.5?1:-1});
+  }
+
+  // Spawn power-ups
+  for(let i=0;i<5;i++){
+    let x = 150 + i*300;
+    let y = 200 + Math.random()*100;
+    let type = Math.random()<0.5?"health":"speed";
+    powerUps.push({x,y,type,collected:false});
+  }
 }
 
 // Spawn Enemy
 function spawnEnemy(){
   let b = closeBuildings[Math.floor(Math.random()*closeBuildings.length)];
-  enemies.push({x: b.x + 10, y: b.y-40, w:30, h:40, dx:1 + Math.random()*1.5});
+  let speed = 1 + Math.random()*2;
+  if(currentDifficulty==='hard') speed +=1;
+  if(currentDifficulty==='impossible') speed +=3;
+  enemies.push({x: b.x + 10, y: b.y-40, w:30, h:40, dx:Math.random()<0.5?-speed:speed});
 }
 
 // Shoot Web
 function shootProjectile() {
-  // Determine direction: 1 = right, -1 = left
   let dir = spiderman.dx >= 0 ? 1 : -1;
   projectiles.push({ 
     x: spiderman.x + (dir === 1 ? 40 : 0), 
     y: spiderman.y + 30, 
     dx: 8 * dir 
   });
+  swingSound.play();
 }
 
 // Update
 function update(){
   if(!gameStarted || gameOver) return;
 
-  // Camera
   cameraX = spiderman.x - 200;
+  spiderman.dx = 0;
 
   // Movement
-  spiderman.dx = 0;
   if(keys["ArrowLeft"]) spiderman.dx = -5;
   if(keys["ArrowRight"]) spiderman.dx = 5;
 
@@ -195,6 +215,7 @@ function update(){
   if(keys["ArrowUp"] && spiderman.onGround){
     spiderman.dy = -12;
     spiderman.onGround = false;
+    jumpSound.play();
   }
 
   // Shoot
@@ -217,13 +238,10 @@ function update(){
     spiderman.swingSpeed += (g / spiderman.swingLength) * Math.sin(spiderman.swingAngle);
     spiderman.swingSpeed *= 0.995;
     spiderman.swingAngle += spiderman.swingSpeed;
-
     spiderman.x = spiderman.web.x - Math.cos(spiderman.swingAngle) * spiderman.swingLength - spiderman.w/2;
     spiderman.y = spiderman.web.y - Math.sin(spiderman.swingAngle) * spiderman.swingLength - spiderman.h/2;
-
     spiderman.x += spiderman.dx;
 
-    // Release swing
     if(!mouse.down){
       spiderman.dx += spiderman.swingSpeed * spiderman.swingLength*0.1;
       spiderman.dy = spiderman.swingSpeed * spiderman.swingLength*0.2;
@@ -236,8 +254,9 @@ function update(){
     spiderman.y += spiderman.dy;
   }
 
-  // Platform collision
   spiderman.onGround=false;
+
+  // Platform collisions
   closeBuildings.forEach(b=>{
     if(spiderman.x< b.x+b.w && spiderman.x+spiderman.w>b.x &&
        spiderman.y+spiderman.h>b.y && spiderman.y+spiderman.h<b.y+20){
@@ -248,6 +267,19 @@ function update(){
         spiderman.web=null;
     }
   });
+
+  // Obstacles collisions
+  obstacles.forEach(obs=>{
+    obs.x += obs.dx;
+    if(obs.x<0 || obs.x>2000) obs.dx*=-1;
+    if(spiderman.x< obs.x+obs.w && spiderman.x+spiderman.w>obs.x &&
+       spiderman.y+spiderman.h>obs.y && spiderman.y+spiderman.h<obs.y+10){
+         spiderman.y=obs.y-spiderman.h;
+         spiderman.dy=0;
+         spiderman.onGround=true;
+    }
+  });
+
   if(spiderman.y+spiderman.h>canvas.height){
     spiderman.y=canvas.height-spiderman.h;
     spiderman.dy=0;
@@ -270,12 +302,23 @@ function update(){
         enemies.splice(ei,1);
         projectiles.splice(pi,1);
         spiderman.score +=10;
+        hitSound.play();
       }
     });
 
     if(spiderman.x<e.x+e.w && spiderman.x+spiderman.w>e.x &&
        spiderman.y<e.y+e.h && spiderman.y+spiderman.h>e.y){
       spiderman.health -=0.5;
+    }
+  });
+
+  // Power-ups
+  powerUps.forEach(p=>{
+    if(!p.collected && spiderman.x<p.x+20 && spiderman.x+spiderman.w>p.x &&
+       spiderman.y< p.y+20 && spiderman.y+spiderman.h>p.y){
+      p.collected=true;
+      if(p.type==="health") spiderman.health +=20;
+      if(p.type==="speed") spiderman.dx *=1.5;
     }
   });
 
@@ -289,13 +332,14 @@ function update(){
   if(spiderman.health <=0){
     gameOver = true;
     gameStarted = false;
+    gameOverSound.play();
     showGameOver();
   }
 
   draw();
 }
 
-// Show Game Over overlay
+// Show Game Over
 function showGameOver(){
   finalScoreEl.textContent = "Score: "+Math.floor(spiderman.score);
   finalHighEl.textContent = "High Score ("+currentDifficulty+"): "+highScores[currentDifficulty];
@@ -312,16 +356,22 @@ function draw(){
   ctx.fillStyle="#87CEEB";
   ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  // Far buildings
+  // Buildings
   ctx.fillStyle="#555";
-  farBuildings.forEach(b=>{
-    ctx.fillRect(b.x - cameraX*0.5, b.y, b.w, b.h);
-  });
-
-  // Close buildings
+  farBuildings.forEach(b=>ctx.fillRect(b.x - cameraX*0.5, b.y, b.w, b.h));
   ctx.fillStyle="#888";
-  closeBuildings.forEach(b=>{
-    ctx.fillRect(b.x - cameraX, b.y, b.w, b.h);
+  closeBuildings.forEach(b=>ctx.fillRect(b.x - cameraX, b.y, b.w, b.h));
+
+  // Obstacles
+  ctx.fillStyle="brown";
+  obstacles.forEach(obs=>ctx.fillRect(obs.x - cameraX, obs.y, obs.w, obs.h));
+
+  // Power-ups
+  powerUps.forEach(p=>{
+    if(!p.collected){
+      ctx.fillStyle = p.type==="health"?"pink":"cyan";
+      ctx.fillRect(p.x - cameraX, p.y, 20, 20);
+    }
   });
 
   // Web
@@ -362,4 +412,3 @@ function loop(){ update(); requestAnimationFrame(loop); }
 </script>
 </body>
 </html>
-
