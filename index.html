@@ -4,23 +4,34 @@
   <title>Spider-Man Game</title>
   <style>
     body { margin:0; overflow:hidden; font-family:Arial; background:#87CEEB; }
-    canvas { display:block; margin:auto; background:#87CEEB; z-index:1; }
+    canvas { display:block; margin:auto; background:#87CEEB; z-index:1; pointer-events:none; }
+    
+    /* Overlays */
     #overlay, #difficultyOverlay, #gameOverOverlay, #levelEndOverlay {
       position:absolute; top:0; left:0; width:100%; height:100%;
-      background:rgba(0,0,0,0.85); color:white; display:flex;
-      flex-direction:column; justify-content:center; align-items:center; z-index:1000;
+      background:rgba(0,0,0,0.85);
+      display:flex; flex-direction:column; justify-content:center; align-items:center;
+      z-index:1000; pointer-events:auto;
     }
+
     button { padding:10px 20px; margin:10px; font-size:16px; cursor:pointer; }
-    #backBtn, #restartBtn { position:absolute; top:10px; right:10px; z-index:5; padding:8px 16px; font-size:14px; cursor:pointer; display:none; }
+
+    #backBtn, #restartBtn {
+      position:absolute; top:10px; z-index:5; padding:8px 16px; font-size:14px; cursor:pointer; display:none;
+    }
+    #backBtn { right:10px; }
     #restartBtn { right:120px; }
+
     #mobileControls {
-      position:absolute; bottom:10px; left:50%; transform:translateX(-50%); display:flex; gap:10px; z-index:5;
+      position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
+      display:flex; gap:10px; z-index:5;
     }
     .mobileBtn { padding:15px 20px; font-size:18px; opacity:0.6; border-radius:5px; background:black; color:white; user-select:none; }
   </style>
 </head>
 <body>
 
+<!-- Level Selection -->
 <div id="overlay">
   <h1>Spider-Man Game</h1>
   <p>Select Level:</p>
@@ -33,6 +44,7 @@
   </div>
 </div>
 
+<!-- Difficulty Selection -->
 <div id="difficultyOverlay" style="display:none;">
   <h2>Level <span id="levelNumber">1</span> - Select Difficulty</h2>
   <div>
@@ -43,11 +55,13 @@
   </div>
 </div>
 
+<!-- Level End -->
 <div id="levelEndOverlay" style="display:none;">
   <h1>You Won the Level!</h1>
   <button onclick="nextLevel()">Next Level</button>
 </div>
 
+<!-- Game Over -->
 <div id="gameOverOverlay" style="display:none;">
   <h1>GAME OVER</h1>
   <p id="finalScore"></p>
@@ -57,9 +71,11 @@
   <button onclick="backToMenu()">Back to Menu</button>
 </div>
 
+<!-- Control Buttons -->
 <button id="backBtn" onclick="backToMenu()">Back</button>
 <button id="restartBtn" onclick="restartGame()">Restart</button>
 
+<!-- Mobile Controls -->
 <div id="mobileControls">
   <div class="mobileBtn" id="leftBtn">⬅️</div>
   <div class="mobileBtn" id="rightBtn">➡️</div>
@@ -70,9 +86,11 @@
 <canvas id="game" width="1000" height="500"></canvas>
 
 <script>
-// --- Canvas and UI ---
+// --- Canvas ---
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+
+// --- UI Elements ---
 let overlay = document.getElementById("overlay");
 let difficultyOverlay = document.getElementById("difficultyOverlay");
 let levelNumberEl = document.getElementById("levelNumber");
@@ -110,7 +128,7 @@ let swingSound = new Audio("https://www.soundjay.com/button/button-16.mp3");
 let hitSound = new Audio("https://www.soundjay.com/button/button-3.mp3");
 let gameOverSound = new Audio("https://www.soundjay.com/button/beep-10.mp3");
 
-// High Score Helper
+// --- High Score Helper ---
 function hsKey(level,diff){ return `level${level}_${diff}`; }
 for(let l=1;l<=5;l++){
   ['easy','medium','hard','impossible'].forEach(diff=>{
@@ -175,7 +193,7 @@ function spawnEnemy(){
   let x=500+Math.random()*1000, y=350, dx=(Math.random()*2+1)*(Math.random()<0.5?-1:1);
   let colors=['green','blue','red']; let color=colors[Math.floor(Math.random()*colors.length)];
   let hits = color==='green'?1:color==='blue'?2:3;
-  let hasGun = Math.random()<0.3; // 30% chance enemy has a gun
+  let hasGun = Math.random()<0.3; // 30% chance
   enemies.push({x,y,w:30,h:40,dx,color,hits,maxHits:hits,gun:hasGun,shootTimer:Math.random()*100});
 }
 
@@ -186,29 +204,37 @@ function shootProjectile(){
   swingSound.play();
 }
 
-// --- UPDATE GAME ---
+// --- SWING ---
+canvas.addEventListener("mousedown", e=>{
+  if(!spiderman.swinging){
+    spiderman.swinging=true;
+    spiderman.web={x:e.offsetX+cameraX, y:e.offsetY};
+  }
+});
+canvas.addEventListener("mouseup", e=>{ spiderman.swinging=false; spiderman.web=null; });
+
+// --- UPDATE ---
 function update(){
   if(!gameStarted || gameOver) return;
   cameraX = spiderman.x - 200;
-  spiderman.dx = 0;
+  spiderman.dx=0;
   if(keys["ArrowLeft"]) spiderman.dx=-5;
   if(keys["ArrowRight"]) spiderman.dx=5;
   if(keys["ArrowUp"] && spiderman.onGround){ spiderman.dy=-12; spiderman.onGround=false; jumpSound.play(); }
   if(keys["Space"]){ shootProjectile(); keys["Space"]=false; }
 
-  // --- Swinging ---
+  // Swing
   if(spiderman.swinging && spiderman.web){
-    let dx = spiderman.web.x - (spiderman.x + spiderman.w/2);
-    let dy = spiderman.web.y - (spiderman.y + spiderman.h/2);
-    let length = Math.sqrt(dx*dx + dy*dy);
-    let angle = Math.atan2(dy, dx);
-    let force = 0.1;
-    spiderman.x += Math.cos(angle)*force;
-    spiderman.y += Math.sin(angle)*force;
+    let dx = spiderman.web.x - (spiderman.x+spiderman.w/2);
+    let dy = spiderman.web.y - (spiderman.y+spiderman.h/2);
+    let angle = Math.atan2(dy,dx);
+    let force=0.1;
+    spiderman.x+=Math.cos(angle)*force;
+    spiderman.y+=Math.sin(angle)*force;
   } else {
-    spiderman.dy += gravity;
-    spiderman.x += spiderman.dx;
-    spiderman.y += spiderman.dy;
+    spiderman.dy+=gravity;
+    spiderman.x+=spiderman.dx;
+    spiderman.y+=spiderman.dy;
   }
 
   spiderman.onGround=false;
@@ -226,18 +252,11 @@ function update(){
   enemies.forEach((e,ei)=>{
     e.x+=e.dx;
     // Bounce off buildings
-    buildings.forEach(b=>{
-      if(e.x< b.x+b.w && e.x+e.w> b.x && e.y+e.h> b.y){ e.dx*=-1; }
-    });
-    // Shoot bullets if gun
+    buildings.forEach(b=>{ if(e.x< b.x+b.w && e.x+e.w> b.x && e.y+e.h> b.y){ e.dx*=-1; } });
+    // Shoot bullets
     if(e.gun){ e.shootTimer--; if(e.shootTimer<=0){ let angle = Math.atan2(spiderman.y-e.y,spiderman.x-e.x); enemyBullets.push({x:e.x+15,y:e.y+20,dx:Math.cos(angle)*5,dy:Math.sin(angle)*5}); e.shootTimer=100+Math.random()*50; } }
     // Hit by player web
-    projectiles.forEach((p,pi)=>{
-      if(p.x<e.x+e.w && p.x+10>e.x && p.y<e.y+e.h && p.y>e.y){
-        e.hits--; projectiles.splice(pi,1);
-        if(e.hits<=0){ enemies.splice(ei,1); spiderman.score+=10; hitSound.play(); }
-      }
-    });
+    projectiles.forEach((p,pi)=>{ if(p.x<e.x+e.w && p.x+10>e.x && p.y<e.y+e.h && p.y>e.y){ e.hits--; projectiles.splice(pi,1); if(e.hits<=0){ enemies.splice(ei,1); spiderman.score+=10; hitSound.play(); } } });
     // Collision with player
     if(spiderman.x<e.x+e.w && spiderman.x+spiderman.w>e.x && spiderman.y<e.y+e.h && spiderman.y+spiderman.h>e.y){ spiderman.health-=0.5; }
   });
@@ -295,4 +314,6 @@ function draw(){
   ctx.fillStyle="white"; ctx.font="16px Arial";
   ctx.fillText("Health: "+Math.floor(spiderman.health),10,20);
   ctx.fillText("Score: "+Math.floor(spiderman.score),10,40);
-  ctx.fillText("High Score (L"+currentLevel
+  ctx.fillText("High Score (L"+currentLevel+"-"+currentDifficulty+"): "+highScores[
+
+
