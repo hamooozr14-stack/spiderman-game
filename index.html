@@ -86,11 +86,12 @@
 <canvas id="game" width="1000" height="500"></canvas>
 
 <script>
-// --- Canvas ---
+// ---------------------
+// ----- GLOBALS -------
+// ---------------------
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-// --- UI Elements ---
 let overlay = document.getElementById("overlay");
 let difficultyOverlay = document.getElementById("difficultyOverlay");
 let levelNumberEl = document.getElementById("levelNumber");
@@ -102,8 +103,20 @@ let finalScoreEl = document.getElementById("finalScore");
 let finalHighEl = document.getElementById("finalHighScore");
 let finalTimeEl = document.getElementById("finalTime");
 
-// --- Input ---
 let keys = {};
+let spiderman, cameraX, gravity, projectiles, enemies, enemyBullets, powerUps, obstacles, buildings;
+let gameStarted=false, gameOver=false, currentLevel=1, currentDifficulty='easy', startTime=0;
+let highScores = {};
+
+// --- SOUNDS ---
+let jumpSound = new Audio("https://www.soundjay.com/button/beep-07.mp3");
+let swingSound = new Audio("https://www.soundjay.com/button/button-16.mp3");
+let hitSound = new Audio("https://www.soundjay.com/button/button-3.mp3");
+let gameOverSound = new Audio("https://www.soundjay.com/button/beep-10.mp3");
+
+// ---------------------
+// ----- INPUT ---------
+// ---------------------
 window.addEventListener("keydown", e=>keys[e.code]=true);
 window.addEventListener("keyup", e=>keys[e.code]=false);
 
@@ -117,18 +130,9 @@ document.getElementById("jumpBtn").addEventListener("touchend", ()=>keys["ArrowU
 document.getElementById("shootBtn").addEventListener("touchstart", ()=>keys["Space"]=true);
 document.getElementById("shootBtn").addEventListener("touchend", ()=>keys["Space"]=false);
 
-// --- Game Variables ---
-let spiderman, cameraX, gravity, projectiles, enemies, enemyBullets, powerUps, obstacles, buildings;
-let gameStarted=false, gameOver=false, currentLevel=1, currentDifficulty='easy', startTime=0;
-let highScores = {};
-
-// Sounds
-let jumpSound = new Audio("https://www.soundjay.com/button/beep-07.mp3");
-let swingSound = new Audio("https://www.soundjay.com/button/button-16.mp3");
-let hitSound = new Audio("https://www.soundjay.com/button/button-3.mp3");
-let gameOverSound = new Audio("https://www.soundjay.com/button/beep-10.mp3");
-
-// --- High Score Helper ---
+// ---------------------
+// ----- HIGH SCORES ---
+// ---------------------
 function hsKey(level,diff){ return `level${level}_${diff}`; }
 for(let l=1;l<=5;l++){
   ['easy','medium','hard','impossible'].forEach(diff=>{
@@ -137,7 +141,9 @@ for(let l=1;l<=5;l++){
   });
 }
 
-// --- LEVEL FUNCTIONS ---
+// ---------------------
+// ----- LEVELS --------
+// ---------------------
 function selectLevel(level){
   currentLevel = level;
   overlay.style.display="none";
@@ -161,16 +167,15 @@ function startGame(diff){
 function restartGame(){ initGame(currentLevel,currentDifficulty); spiderman.health=100; spiderman.score=0; gameOver=false; gameStarted=true; startTime=Date.now(); }
 function nextLevel(){ levelEndOverlay.style.display="none"; if(currentLevel<5){ selectLevel(currentLevel+1); } else { alert("You finished all levels!"); backToMenu(); } }
 
-// --- INIT GAME ---
+// ---------------------
+// ----- INIT GAME -----
+// ---------------------
 function initGame(level,diff){
   spiderman={x:100,y:350,w:40,h:60,dx:0,dy:0,onGround:false,swinging:false,web:null,score:0,health:100};
   cameraX=0; gravity=0.7; projectiles=[]; enemies=[]; enemyBullets=[]; powerUps=[]; obstacles=[]; buildings=[];
   
   let enemyCount=[6,10,12,15,18][level-1];
-  let obstacleCount=[0,1,2,3,4][level-1];
-  let powerUpCount=[0,1,2,2,3][level-1];
   let mapLength=[1500,1800,2000,2500,3000][level-1];
-
   let multiplier = diff==='medium'?1.5: diff==='hard'?2: diff==='impossible'?3:1;
   enemyCount = Math.floor(enemyCount*multiplier);
 
@@ -180,31 +185,27 @@ function initGame(level,diff){
     let color=`rgb(${50+Math.random()*100},${50+Math.random()*100},${50+Math.random()*100})`;
     buildings.push({x,y,w,h,color});
   }
-  // Obstacles
-  for(let i=0;i<obstacleCount;i++){ let x=200+i*300,y=250+Math.random()*150; obstacles.push({x,y,w:50,h:10,dx:Math.random()<0.5?1.5:-1.5}); }
-  // Power-ups
-  for(let i=0;i<powerUpCount;i++){ let x=150+i*400,y=200+Math.random()*150; let type=Math.random()<0.5?"health":"speed"; powerUps.push({x,y,type,collected:false}); }
+
   // Enemies
-  for(let i=0;i<enemyCount;i++) spawnEnemy();
+  for(let i=0;i<enemyCount;i++){
+    let x=500+Math.random()*1000, y=350, dx=(Math.random()*2+1)*(Math.random()<0.5?-1:1);
+    let colors=['green','blue','red']; let color=colors[Math.floor(Math.random()*colors.length)];
+    let hits = color==='green'?1:color==='blue'?2:3;
+    let hasGun = Math.random()<0.3;
+    enemies.push({x,y,w:30,h:40,dx,color,hits,maxHits:hits,gun:hasGun,shootTimer:Math.random()*100});
+  }
 }
 
-// --- SPAWN ENEMY ---
-function spawnEnemy(){
-  let x=500+Math.random()*1000, y=350, dx=(Math.random()*2+1)*(Math.random()<0.5?-1:1);
-  let colors=['green','blue','red']; let color=colors[Math.floor(Math.random()*colors.length)];
-  let hits = color==='green'?1:color==='blue'?2:3;
-  let hasGun = Math.random()<0.3; // 30% chance
-  enemies.push({x,y,w:30,h:40,dx,color,hits,maxHits:hits,gun:hasGun,shootTimer:Math.random()*100});
-}
-
-// --- SHOOT WEB ---
+// ---------------------
+// ----- SHOOTING ------
 function shootProjectile(){ 
   let dir = keys["ArrowRight"]?1:keys["ArrowLeft"]?-1:1;
   projectiles.push({x:spiderman.x + (dir>0?40:0), y:spiderman.y +30, dx:8*dir});
   swingSound.play();
 }
 
-// --- SWING ---
+// ---------------------
+// ----- SWINGING -----
 canvas.addEventListener("mousedown", e=>{
   if(!spiderman.swinging){
     spiderman.swinging=true;
@@ -213,16 +214,129 @@ canvas.addEventListener("mousedown", e=>{
 });
 canvas.addEventListener("mouseup", e=>{ spiderman.swinging=false; spiderman.web=null; });
 
-// --- MAIN LOOP ---
-function loop(){ update(); requestAnimationFrame(loop); }
+// ---------------------
+// ----- MAIN LOOP -----
+function loop(){ update(); draw(); if(gameStarted) requestAnimationFrame(loop); }
 
-// --- UPDATE & DRAW ---
-// (rest of the update/draw logic same as before)
+// ---------------------
+// ----- UPDATE LOGIC ---
+function update(){
+  if(!gameStarted || gameOver) return;
+  cameraX = spiderman.x - 200;
 
+  // Movement
+  spiderman.dx=0;
+  if(keys["ArrowLeft"]) spiderman.dx=-5;
+  if(keys["ArrowRight"]) spiderman.dx=5;
+  if(keys["ArrowUp"] && spiderman.onGround){ spiderman.dy=-12; spiderman.onGround=false; jumpSound.play(); }
+  if(keys["Space"]){ shootProjectile(); keys["Space"]=false; }
+
+  // Swing
+  if(spiderman.swinging && spiderman.web){
+    let dx = spiderman.web.x - (spiderman.x+spiderman.w/2);
+    let dy = spiderman.web.y - (spiderman.y+spiderman.h/2);
+    let angle = Math.atan2(dy,dx);
+    let force=0.1;
+    spiderman.x+=Math.cos(angle)*force;
+    spiderman.y+=Math.sin(angle)*force;
+  } else {
+    spiderman.dy+=gravity;
+    spiderman.x+=spiderman.dx;
+    spiderman.y+=spiderman.dy;
+  }
+
+  spiderman.onGround=false;
+  if(spiderman.y+spiderman.h>canvas.height-20){ spiderman.y=canvas.height-20-spiderman.h; spiderman.dy=0; spiderman.onGround=true; }
+
+  // Projectiles
+  projectiles.forEach(p=>p.x+=p.dx);
+  projectiles=projectiles.filter(p=>p.x>cameraX && p.x<cameraX+canvas.width);
+
+  // Enemies
+  enemies.forEach((e,ei)=>{
+    e.x+=e.dx;
+    // Bounce inside buildings
+    buildings.forEach(b=>{
+      if(e.x< b.x+b.w && e.x+e.w> b.x && e.y+e.h> b.y){
+        e.dx*=-1;
+      }
+    });
+    // Hit by web
+    projectiles.forEach((p,pi)=>{
+      if(p.x<e.x+e.w && p.x+10>e.x && p.y<e.y+e.h && p.y>e.y){
+        e.hits--;
+        projectiles.splice(pi,1);
+        if(e.hits<=0){ enemies.splice(ei,1); spiderman.score+=10; hitSound.play(); }
+      }
+    });
+    // Collision with player
+    if(spiderman.x<e.x+e.w && spiderman.x+spiderman.w>e.x && spiderman.y<e.y+e.h && spiderman.y+spiderman.h>e.y){
+      spiderman.health-=0.5;
+    }
+  });
+
+  // High score
+  let key = hsKey(currentLevel,currentDifficulty);
+  if(spiderman.score>highScores[key]){ highScores[key]=Math.floor(spiderman.score); localStorage.setItem(key, highScores[key]); }
+
+  // Level end
+  if(enemies.length===0 && !gameOver){ gameStarted=false; levelEndOverlay.style.display="flex"; }
+
+  if(spiderman.health<=0){ gameOver=true; gameStarted=false; gameOverSound.play(); showGameOver(); }
+}
+
+// ---------------------
+// ----- GAME OVER -----
+function showGameOver(){
+  finalScoreEl.textContent = "Score: "+Math.floor(spiderman.score);
+  finalHighEl.textContent = "High Score (L"+currentLevel+"-"+currentDifficulty+"): "+highScores[hsKey(currentLevel,currentDifficulty)];
+  let seconds = Math.floor((Date.now()-startTime)/1000);
+  finalTimeEl.textContent = "Time Survived: "+seconds+" seconds";
+  gameOverOverlay.style.display="flex";
+}
+
+// ---------------------
+// ----- DRAW ---------
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Sky and ground
+  ctx.fillStyle="#87CEEB"; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle="#654321"; ctx.fillRect(0,canvas.height-20,canvas.width,20);
+
+  // Buildings
+  buildings.forEach(b=>{
+    ctx.fillStyle=b.color; ctx.fillRect(b.x-cameraX,b.y,b.w,b.h);
+    for(let wx=5; wx<b.w; wx+=15){ for(let wy=5; wy<b.h; wy+=20){ ctx.fillStyle="yellow"; ctx.fillRect(b.x-cameraX+wx,b.y+wy,5,10); } } 
+  });
+
+  // Spider-Man
+  ctx.fillStyle="red"; ctx.fillRect(spiderman.x-cameraX,spiderman.y,spiderman.w,spiderman.h);
+
+  // Web
+  if(spiderman.swinging && spiderman.web){
+    ctx.strokeStyle="white"; ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(spiderman.x+spiderman.w/2-cameraX, spiderman.y+spiderman.h/2);
+    ctx.lineTo(spiderman.web.x-cameraX, spiderman.web.y);
+    ctx.stroke();
+  }
+
+  // Projectiles
+  ctx.fillStyle="white"; projectiles.forEach(p=>ctx.fillRect(p.x-cameraX,p.y,10,2));
+
+  // Enemies
+  enemies.forEach(e=>{
+    ctx.fillStyle=e.color; ctx.fillRect(e.x-cameraX,e.y,e.w,e.h);
+  });
+
+  // HUD
+  ctx.fillStyle="white"; ctx.font="16px Arial";
+  ctx.fillText("Health: "+Math.floor(spiderman.health),10,20);
+  ctx.fillText("Score: "+Math.floor(spiderman.score),10,40);
+  ctx.fillText("High Score (L"+currentLevel+"-"+currentDifficulty+"): "+highScores[hsKey(currentLevel,currentDifficulty)],10,60);
+}
 </script>
+
 </body>
 </html>
-
-
-
-
